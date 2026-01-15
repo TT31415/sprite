@@ -1,0 +1,774 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リアルタイム姿勢検出</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-hover: #0056b3;
+            --danger-color: #dc3545;
+            --danger-hover: #c82333;
+            --success-color: #28a745;
+            --info-color: #17a2b8;
+            --info-hover: #138496;
+            --gray-50: #f8f9fa;
+            --gray-100: #f5f5f5;
+            --gray-300: #ddd;
+            --gray-600: #6c757d;
+            --gray-700: #495057;
+            --gray-900: #333;
+            --border-radius: 8px;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, var(--gray-100) 0%, var(--gray-50) 100%);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-layout {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+        }
+
+        .header h1 {
+            margin: 0;
+            color: var(--gray-900);
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge.running {
+            background: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+            border: 1px solid rgba(40, 167, 69, 0.2);
+        }
+
+        .status-badge.stopped {
+            background: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+            height: calc(100vh - 140px);
+        }
+
+        .canvas-container {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .canvas-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin: 0;
+        }
+
+        .pose-canvas {
+            flex: 1;
+            border: 2px solid var(--gray-300);
+            border-radius: var(--border-radius);
+            background: var(--gray-50);
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow: scroll;
+            scrollbar-width: none;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 20px;
+            transition: var(--transition);
+        }
+
+        .info-card:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .info-card h3 {
+            margin: 0 0 16px 0;
+            color: var(--gray-700);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .detection-card {
+            text-align: center;
+        }
+
+        .pose-count {
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin: 8px 0;
+            line-height: 1;
+        }
+
+        .detection-status {
+            font-size: 14px;
+            color: var(--gray-600);
+            margin-top: 8px;
+        }
+
+        .info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--gray-50);
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-size: 13px;
+            color: var(--gray-600);
+            font-weight: 500;
+        }
+
+        .info-value {
+            font-size: 13px;
+            color: var(--gray-900);
+            font-weight: 600;
+        }
+
+        .fullscreen-btn {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            z-index: 1000;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            padding: 12px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        .fullscreen-btn:hover {
+            background: var(--primary-hover);
+            transform: scale(1.05);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--gray-300);
+            transition: var(--transition);
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: var(--transition);
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+            
+            .sidebar {
+                flex-direction: row;
+                overflow-x: auto;
+            }
+            
+            .info-card {
+                min-width: 200px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .app-layout {
+                padding: 10px;
+                gap: 10px;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 16px;
+                text-align: center;
+            }
+            
+            .sidebar {
+                flex-direction: column;
+            }
+            
+            .main-content {
+                height: calc(100vh - 200px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <header class="header">
+            <h1>リアルタイム姿勢検出</h1>
+            <div class="header-controls">
+                <span id="status" class="status-badge stopped">システム停止中</span>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="poseCanvas" class="pose-canvas" width="800" height="600"></canvas>
+            </div>
+            
+            <div class="sidebar">
+                <div class="info-card detection-card">
+                    <h3>検出状況</h3>
+                    <div class="pose-count" id="poseCount">0</div>
+                    <div class="detection-status" id="detectionStatus">検出待機中</div>
+                </div>
+                
+                <div class="info-card">
+                    <h3>システム情報</h3>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <span class="info-label">解像度:</span>
+                            <span class="info-value" id="resolution">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">FPS:</span>
+                            <span class="info-value" id="actualFps">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="info-card">
+                    <h3>接続状況</h3>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <span class="info-label">WebSocket:</span>
+                            <span class="info-value" id="wsStatus">切断</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">最終更新:</span>
+                            <span class="info-value" id="lastUpdate">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-card">
+                    <h3>表示設定</h3>
+                    <div class="info-list">
+                        <div class="info-item">
+                            <span class="info-label">キーポイントラベル:</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showLabels" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">カメラ映像:</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showCamera">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">フルスクリーン:</span>
+                            <button class="btn btn-primary" id="fullscreenBtn">フルスクリーン</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+        let canvas = document.getElementById('poseCanvas');
+        let ctx = canvas.getContext('2d');
+        let frameCount = 0;
+        let lastTime = Date.now();
+        let connectionTimeout = null;
+        let showLabels = true; // ラベル表示フラグ
+        let showCamera = false; // カメラ映像表示フラグ（デフォルトOFF）
+        let lastImageData = null; // 前回の画像データ（チラつき抑制用）
+
+        // WebSocket応答監視タイマーリセット
+        function resetConnectionTimeout() {
+            if (connectionTimeout) clearTimeout(connectionTimeout);
+            connectionTimeout = setTimeout(function() {
+                document.getElementById('status').textContent = '接続エラー';
+                document.getElementById('status').className = 'status-badge stopped';
+            }, 5000);
+        }
+
+        // フルスクリーン機能
+        const elem = document.documentElement;
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        // フルスクリーン状態を確認する関数
+        function isFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement || 
+                     document.mozFullScreenElement || document.msFullscreenElement);
+        }
+        
+        // ボタンテキストを更新する関数
+        function updateFullscreenButton() {
+            if (isFullscreen()) {
+                fullscreenBtn.textContent = '通常表示';
+            } else {
+                fullscreenBtn.textContent = 'フルスクリーン';
+            }
+        }
+        
+        // フルスクリーン切り替え関数
+        function toggleFullscreen() {
+            if (isFullscreen()) {
+                // フルスクリーンを終了
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            } else {
+                // フルスクリーンに入る
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.mozRequestFullScreen) {
+                    elem.mozRequestFullScreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+            }
+        }
+        
+        // ボタンクリックイベント
+        fullscreenBtn.addEventListener('click', toggleFullscreen);
+        
+        // ラベル表示切り替えイベント
+        document.getElementById('showLabels').addEventListener('change', function(e) {
+            showLabels = e.target.checked;
+        });
+        
+        // カメラ映像表示切り替えイベント
+        document.getElementById('showCamera').addEventListener('change', function(e) {
+            showCamera = e.target.checked;
+            
+            // サーバーに設定変更を送信
+            if (socket && socket.connected) {
+                socket.emit('camera_setting', { showCamera: showCamera });
+            }
+        });
+        
+        // フルスクリーン状態変更の監視
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+        document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+        document.addEventListener('msfullscreenchange', updateFullscreenButton);
+        
+        // WebSocketの接続
+        function connectWebSocket() {
+            if (socket) {
+                socket.disconnect();
+            }
+            
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('WebSocket connected');
+                document.getElementById('wsStatus').textContent = '接続済み';
+                resetConnectionTimeout();
+                
+                // 接続時にカメラ表示設定を送信
+                socket.emit('camera_setting', { showCamera: showCamera });
+            });
+            
+            socket.on('pose_data', function(data) {
+                updateVisualization(data);
+                updateInfo(data);
+                resetConnectionTimeout();
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('WebSocket disconnected');
+                document.getElementById('wsStatus').textContent = '切断';
+            });
+            
+            socket.on('connect_error', function(error) {
+                console.error('WebSocket connection error:', error);
+                document.getElementById('wsStatus').textContent = '接続エラー';
+            });
+            
+            // データ受信がなければ5秒後にエラー表示
+            resetConnectionTimeout();
+        }
+        
+        // 姿勢データの可視化
+        function updateVisualization(data) {
+            // システムが停止している場合の処理
+            if (!data.detection_running) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 背景を暗いグレーに設定
+                ctx.fillStyle = '#e9ecef';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 「システム停止中」メッセージを表示
+                ctx.fillStyle = '#dc3545';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('システム停止中', canvas.width / 2, canvas.height / 2 - 30);
+                
+                // サブメッセージを表示
+                ctx.fillStyle = '#6c757d';
+                ctx.font = '24px Arial';
+                ctx.fillText('検出処理が実行されていません', canvas.width / 2, canvas.height / 2 + 30);
+                return;
+            }
+            
+            // カメラフレームがある場合でも、表示設定に従って処理
+            if (data.frame && showCamera) {
+                const img = new Image();
+                img.onload = function() {
+                    // キャンバスサイズ調整（必要な場合のみ）
+                    if (canvas.width !== img.width || canvas.height !== img.height) {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                    }
+                    
+                    // 高速描画設定
+                    // ctx.imageSmoothingEnabled = false;  // アンチエイリアス無効で高速化
+                    
+                    // 直接メインキャンバスに描画
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    // その上にポーズデータを描画
+                    drawPoseDataToContext(ctx, data);
+                };
+                img.src = data.frame;
+            } else {
+                // カメラフレームがない場合、または表示しない設定の場合
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (data.poses.length === 0) {
+                    // 人がいない場合は薄いグレーの背景
+                    ctx.fillStyle = '#f8f9fa';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // メッセージを表示
+                    ctx.fillStyle = '#6c757d';
+                    ctx.font = '24px Arial';
+                    ctx.textAlign = 'center';
+                    let message = showCamera ? 'カメラが接続されていません' : '人物が検出されていません';
+                    ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+                    return;
+                }
+                
+                drawPoseDataToContext(ctx, data);
+            }
+        }
+        
+        // ポーズデータを描画する関数（指定されたコンテキストに描画）
+        function drawPoseDataToContext(targetCtx, data) {
+            // 各人物の姿勢を描画
+            data.poses.forEach((person, index) => {
+                // キーポイントを描画
+                person.keypoints.forEach((kp, keypointIndex) => {
+                    if (kp.visible) {
+                        // 通常のキーポイント描画
+                        targetCtx.beginPath();
+                        targetCtx.arc(kp.x, kp.y, 6, 0, 2 * Math.PI);
+                        targetCtx.fillStyle = '#00ff00';
+                        targetCtx.fill();
+                        
+                        // ラベル表示が有効な場合のみキーポイントにラベルを表示
+                        if (showLabels) {
+                            targetCtx.font = '16px Arial';
+                            targetCtx.textAlign = 'center';
+                            targetCtx.textBaseline = 'middle';
+                            
+                            let label = '';
+                            let offsetY = -25;
+                            
+                            switch(keypointIndex) {
+                                case 0: label = '👃鼻'; break;
+                                case 1: label = '👁️左目'; break;
+                                case 2: label = '👁️右目'; break;
+                                case 3: label = '👂左耳'; break;
+                                case 4: label = '👂右耳'; break;
+                                case 5: label = '🤲左肩'; break;
+                                case 6: label = '🤲右肩'; break;
+                                case 7: label = '💪左肘'; break;
+                                case 8: label = '💪右肘'; break;
+                                case 9: label = '✋左手首'; break;
+                                case 10: label = '🤚右手首'; break;
+                                case 11: label = '🦴左腰'; break;
+                                case 12: label = '🦴右腰'; break;
+                                case 13: label = '🦵左膝'; break;
+                                case 14: label = '🦵右膝'; break;
+                                case 15: label = '🦶左足首'; offsetY = 25; break;
+                                case 16: label = '🦶右足首'; offsetY = 25; break;
+                                default: label = `🔵${keypointIndex}`; break;
+                            }
+                            
+                            if (label) {
+                                // 白い縁取りで見やすくする
+                                targetCtx.strokeStyle = '#ffffff';
+                                targetCtx.lineWidth = 3;
+                                targetCtx.strokeText(label, kp.x, kp.y + offsetY);
+                                targetCtx.fillStyle = '#000000';
+                                targetCtx.fillText(label, kp.x, kp.y + offsetY);
+                            }
+                        }
+                    }
+                });
+                
+                // 骨格を描画
+                person.skeleton.forEach(bone => {
+                    const fromX = bone.from_point.x;
+                    const fromY = bone.from_point.y;
+                    const toX = bone.to_point.x;
+                    const toY = bone.to_point.y;
+                    
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(fromX, fromY);
+                    targetCtx.lineTo(toX, toY);
+                    targetCtx.strokeStyle = '#ff0000';
+                    targetCtx.lineWidth = 4;
+                    targetCtx.stroke();
+                });
+                
+                // 人物番号を表示（バウンディングボックスがある場合）
+                if (person.bbox) {
+                    targetCtx.strokeStyle = '#ffff00';
+                    targetCtx.lineWidth = 2;
+                    targetCtx.strokeRect(person.bbox.x, person.bbox.y, person.bbox.width, person.bbox.height);
+                    
+                    // 人物番号を表示
+                    targetCtx.font = '20px Arial';
+                    targetCtx.strokeStyle = '#ffffff';
+                    targetCtx.lineWidth = 3;
+                    targetCtx.strokeText(`Person ${index + 1}`, person.bbox.x + 5, person.bbox.y - 5);
+                    targetCtx.fillStyle = '#ffff00';
+                    targetCtx.fillText(`Person ${index + 1}`, person.bbox.x + 5, person.bbox.y - 5);
+                }
+            });
+        }
+
+        // 情報パネルの更新
+        function updateInfo(data) {
+            document.getElementById('poseCount').textContent = data.person_count || 0;
+            
+            // 検出状況の更新
+            const detectionStatus = document.getElementById('detectionStatus');
+            if (!data.detection_running) {
+                detectionStatus.textContent = '検出停止中';
+                detectionStatus.style.color = '#dc3545';
+            }else if (data.person_count > 0) {
+                detectionStatus.textContent = `${data.person_count}人検出中`;
+                detectionStatus.style.color = '#28a745';
+            } else {
+                detectionStatus.textContent = '人物なし';
+                detectionStatus.style.color = '#6c757d';
+            }
+            // バナー更新
+            const statusDiv = document.getElementById('status');
+            if (!data.detection_running) {
+                statusDiv.textContent = 'システム停止中';
+                statusDiv.className = 'status stopped';
+            } else {
+                statusDiv.textContent = '検出中';
+                statusDiv.className = 'status running';
+            }
+            
+            // FPS計算
+            frameCount++;
+            const now = Date.now();
+            if (now - lastTime >= 1000) {
+                document.getElementById('actualFps').textContent = frameCount;
+                frameCount = 0;
+                lastTime = now;
+            }
+            
+            // 最終更新時刻
+            const updateTime = new Date(data.timestamp * 1000);
+            document.getElementById('lastUpdate').textContent = updateTime.toLocaleTimeString();
+        }
+
+        async function checkStatus() {
+            try {
+                const response = await fetch('/api/control/status');
+                const result = await response.json();
+                document.getElementById('resolution').textContent = `${result.camera_resolution.width}x${result.camera_resolution.height}`;
+                const statusDiv = document.getElementById('status');
+                if (result.running) {
+                    statusDiv.textContent = '検出中';
+                    statusDiv.className = 'status running';
+                } else {
+                    statusDiv.textContent = 'システム停止中';
+                    statusDiv.className = 'status stopped';
+                }
+                // canvasサイズをAPI解像度に合わせる
+                canvas.width = result.camera_resolution.width;
+                canvas.height = result.camera_resolution.height;
+                console.log('Status:', result);
+            } catch (error) {
+                alert('状態確認に失敗しました: ' + error);
+            }
+        }
+        
+        // 初期化
+        window.addEventListener('load', function() {
+          checkStatus();
+          connectWebSocket();
+        });
+        
+        // ページを閉じる時にWebSocket接続を切断
+        window.addEventListener('beforeunload', function() {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>
